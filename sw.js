@@ -1,6 +1,6 @@
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open("qr-app-cache-v2").then((cache) =>
+    caches.open("qr-app-cache-v3").then((cache) =>
       cache.addAll([
         "./",
         "./index.html",
