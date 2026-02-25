@@ -3,115 +3,161 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Scanner (Auto Save)</title>
+  <title>Smart QR Scanner</title>
 
-  <!-- PWA manifest -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0f0">
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f0" />
 
-  <!-- QR Library -->
+  <!-- QR library -->
   <script src="https://unpkg.com/html5-qrcode" defer></script>
 
   <style>
     body {
       font-family: system-ui, sans-serif;
-      text-align: center;
       background: #111;
       color: #fff;
+      text-align: center;
       margin: 0;
       padding: 20px;
     }
+    h1 { color: #0f0; }
     #reader {
       width: 320px;
-      margin: 40px auto;
+      margin: 30px auto;
       border: 2px solid #0f0;
       border-radius: 10px;
     }
     #status {
-      margin-top: 20px;
-      font-size: 1.2em;
+      margin-top: 15px;
+      font-size: 1.1em;
       color: #0f0;
     }
-    .install-btn {
-      margin-top: 15px;
+    button, input[type="file"] {
       background: #0f0;
       color: #000;
-      padding: 10px 20px;
       border: none;
+      padding: 10px 20px;
+      margin: 10px;
       border-radius: 8px;
       cursor: pointer;
       font-weight: 600;
+    }
+    .install-btn {
       display: none;
     }
   </style>
 </head>
 <body>
-  <h1>Auto QR Scanner</h1>
+  <h1>Smart QR Scanner</h1>
+  <div>
+    <button id="cameraToggle">Switch Camera</button>
+    <input type="file" id="qrFile" accept="image/*" />
+  </div>
   <div id="reader"></div>
   <div id="status">Initializing camera...</div>
   <button id="installBtn" class="install-btn">Install App</button>
 
   <script>
-    // ✅ PWA install prompt
     let deferredPrompt;
-    const installBtn = document.getElementById('installBtn');
+    const installBtn = document.getElementById("installBtn");
+    const statusEl = document.getElementById("status");
+    const fileInput = document.getElementById("qrFile");
+    const cameraToggle = document.getElementById("cameraToggle");
 
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      installBtn.style.display = 'inline-block';
-    });
-
-    installBtn.addEventListener('click', () => {
-      installBtn.style.display = 'none';
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(() => deferredPrompt = null);
-    });
-
-    // ✅ Register Service Worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js');
+    // Register Service Worker
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js");
     }
 
-    // ✅ QR Scanning Logic
-    window.addEventListener('load', () => {
-      const reader = new Html5Qrcode("reader");
-
-      Html5Qrcode.getCameras().then(cameras => {
-        if (cameras && cameras.length) {
-          const cameraId = cameras[0].id;
-          reader.start(
-            cameraId,
-            { fps: 10, qrbox: 250 },
-            qrCodeMessage => {
-              document.getElementById('status').innerText = 
-                "✅ QR Scanned! Saving file...";
-
-              // Auto save text as .txt
-              const blob = new Blob([qrCodeMessage], { type: "text/plain" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = "scanned_text.txt";
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-
-              // Stop scanning after success
-              reader.stop().then(() => {
-                document.getElementById('status').innerText = 
-                  "File saved successfully ✅";
-              });
-            },
-            () => { document.getElementById('status').innerText = "Scanning..."; }
-          );
-        } else {
-          document.getElementById('status').innerText = "No camera found.";
-        }
-      }).catch(err => {
-        document.getElementById('status').innerText = "Camera error: " + err;
-      });
+    // Handle install prompt
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.style.display = "inline-block";
     });
+
+    installBtn.addEventListener("click", () => {
+      installBtn.style.display = "none";
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(() => (deferredPrompt = null));
+    });
+
+    // Initialize QR code scanner
+    let reader = null;
+    let currentCamera = 0;
+    let cameras = [];
+    let scanTimeout = null;
+
+    async function startScanner() {
+      try {
+        if (!reader) reader = new Html5Qrcode("reader");
+
+        cameras = await Html5Qrcode.getCameras();
+        if (cameras.length === 0) {
+          statusEl.innerText = "No cameras found. Use image upload.";
+          return;
+        }
+
+        const cameraId = cameras[currentCamera].id;
+        await reader.start(
+          cameraId,
+          { fps: 10, qrbox: 250 },
+          (decodedText) => {
+            if (!decodedText || decodedText.trim() === "") return;
+
+            statusEl.innerText = "✅ QR detected! Saving file...";
+            handleScan(decodedText);
+
+            // Stop then restart after delay
+            reader.stop().then(() => {
+              clearTimeout(scanTimeout);
+              scanTimeout = setTimeout(() => startScanner(), 1500);
+            });
+          },
+          () => (statusEl.innerText = "Scanning...")
+        );
+      } catch (err) {
+        statusEl.innerText = "Camera error: " + err;
+      }
+    }
+
+    // Switch camera front/back
+    cameraToggle.addEventListener("click", async () => {
+      if (!cameras.length) return;
+      currentCamera = (currentCamera + 1) % cameras.length;
+      await reader.stop();
+      startScanner();
+    });
+
+    // Handle upload from file
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const result = await Html5QrcodeScanner.scanFile(file, true);
+        if (result) handleScan(result);
+      } catch (err) {
+        statusEl.innerText = "Could not read QR from image.";
+      }
+    });
+
+    // Save decoded text
+    function handleScan(text) {
+      const cleanText = text.trim();
+      const blob = new Blob([cleanText], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "scanned_text.txt";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      statusEl.innerText = "File saved ✅ restarting scanner...";
+    }
+
+    // Start the scanner when ready
+    window.addEventListener("load", startScanner);
   </script>
 </body>
 </html>
