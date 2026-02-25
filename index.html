@@ -5,11 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Smart QR Scanner</title>
 
-  <!-- PWA -->
+  <!-- PWA Manifest -->
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#0f0" />
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 
-  <!-- QR library -->
+  <!-- QR Library -->
   <script src="https://unpkg.com/html5-qrcode" defer></script>
 
   <style>
@@ -22,17 +24,8 @@
       padding: 20px;
     }
     h1 { color: #0f0; }
-    #reader {
-      width: 320px;
-      margin: 30px auto;
-      border: 2px solid #0f0;
-      border-radius: 10px;
-    }
-    #status {
-      margin-top: 15px;
-      font-size: 1.1em;
-      color: #0f0;
-    }
+    #reader { width: 320px; margin: 20px auto; border: 2px solid #0f0; border-radius: 10px; }
+    #status { margin-top: 15px; font-size: 1.1em; color: #0f0; }
     button, input[type="file"] {
       background: #0f0;
       color: #000;
@@ -43,9 +36,7 @@
       cursor: pointer;
       font-weight: 600;
     }
-    .install-btn {
-      display: none;
-    }
+    .install-btn { display: none; }
   </style>
 </head>
 <body>
@@ -70,20 +61,19 @@
       navigator.serviceWorker.register("sw.js");
     }
 
-    // Handle install prompt
+    // Handle PWA install
     window.addEventListener("beforeinstallprompt", (e) => {
       e.preventDefault();
       deferredPrompt = e;
       installBtn.style.display = "inline-block";
     });
-
     installBtn.addEventListener("click", () => {
       installBtn.style.display = "none";
       deferredPrompt.prompt();
       deferredPrompt.userChoice.then(() => (deferredPrompt = null));
     });
 
-    // Initialize QR code scanner
+    // QR Scanner
     let reader = null;
     let currentCamera = 0;
     let cameras = [];
@@ -92,9 +82,8 @@
     async function startScanner() {
       try {
         if (!reader) reader = new Html5Qrcode("reader");
-
         cameras = await Html5Qrcode.getCameras();
-        if (cameras.length === 0) {
+        if (!cameras.length) {
           statusEl.innerText = "No cameras found. Use image upload.";
           return;
         }
@@ -105,11 +94,8 @@
           { fps: 10, qrbox: 250 },
           (decodedText) => {
             if (!decodedText || decodedText.trim() === "") return;
-
             statusEl.innerText = "✅ QR detected! Saving file...";
             handleScan(decodedText);
-
-            // Stop then restart after delay
             reader.stop().then(() => {
               clearTimeout(scanTimeout);
               scanTimeout = setTimeout(() => startScanner(), 1500);
@@ -130,19 +116,27 @@
       startScanner();
     });
 
-    // Handle upload from file
+    // Handle QR file upload
     fileInput.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
+
       try {
-        const result = await Html5QrcodeScanner.scanFile(file, true);
-        if (result) handleScan(result);
+        statusEl.innerText = "📂 Reading QR from file...";
+        const result = await Html5Qrcode.scanFile(file, true); // auto scan
+        if (result) {
+          statusEl.innerText = "✅ QR extracted from file! Saving...";
+          handleScan(result);
+
+          // Restart scanner after short delay
+          setTimeout(() => startScanner(), 1500);
+        }
       } catch (err) {
-        statusEl.innerText = "Could not read QR from image.";
+        statusEl.innerText = "❌ Could not read QR from file.";
       }
     });
 
-    // Save decoded text
+    // Auto-save QR text to TXT
     function handleScan(text) {
       const cleanText = text.trim();
       const blob = new Blob([cleanText], { type: "text/plain" });
@@ -156,8 +150,8 @@
       statusEl.innerText = "File saved ✅ restarting scanner...";
     }
 
-    // Start the scanner when ready
+    // Start scanning when page loads
     window.addEventListener("load", startScanner);
   </script>
 </body>
-</html>
+      </html> 
