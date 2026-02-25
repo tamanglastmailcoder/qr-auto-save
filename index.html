@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto QR Code Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode" defer></script>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      text-align: center;
+      background: #111;
+      color: #fff;
+    }
+    #reader {
+      width: 320px;
+      margin: 40px auto;
+      border: 2px solid #0f0;
+      border-radius: 10px;
+    }
+    #status {
+      margin-top: 20px;
+      font-size: 1.2em;
+      color: #0f0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Auto QR Scanner</h1>
+  <div id="reader"></div>
+  <div id="status">Initializing camera...</div>
+
+  <script>
+    // Wait for html5-qrcode library to load
+    window.addEventListener('load', () => {
+      const reader = new Html5Qrcode("reader");
+
+      // Start camera
+      Html5Qrcode.getCameras().then(cameras => {
+        if (cameras && cameras.length) {
+          const cameraId = cameras[0].id;
+          reader.start(
+            cameraId,
+            { fps: 10, qrbox: 250 },
+            qrCodeMessage => {
+              document.getElementById('status').innerText = 
+                "✅ QR Scanned! Saving file...";
+
+              // Auto-save the text in a TXT file
+              const blob = new Blob([qrCodeMessage], { type: "text/plain" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = "scanned_text.txt";
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+
+              // Stop scanning after first successful scan
+              reader.stop().then(() => {
+                document.getElementById('status').innerText = 
+                  "File saved successfully ✅";
+              });
+            },
+            errorMessage => {
+              document.getElementById('status').innerText = "Scanning...";
+            }
+          );
+        } else {
+          document.getElementById('status').innerText = "No camera found.";
+        }
+      }).catch(err => {
+        document.getElementById('status').innerText = "Camera error: " + err;
+      });
+    });
+  </script>
+</body>
+</html>
