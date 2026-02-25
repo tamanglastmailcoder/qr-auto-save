@@ -3,14 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Auto QR Code Scanner</title>
+  <title>QR Scanner (Auto Save)</title>
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f0">
+
+  <!-- QR Library -->
   <script src="https://unpkg.com/html5-qrcode" defer></script>
+
   <style>
     body {
       font-family: system-ui, sans-serif;
       text-align: center;
       background: #111;
       color: #fff;
+      margin: 0;
+      padding: 20px;
     }
     #reader {
       width: 320px;
@@ -23,19 +32,51 @@
       font-size: 1.2em;
       color: #0f0;
     }
+    .install-btn {
+      margin-top: 15px;
+      background: #0f0;
+      color: #000;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <h1>Auto QR Scanner</h1>
   <div id="reader"></div>
   <div id="status">Initializing camera...</div>
+  <button id="installBtn" class="install-btn">Install App</button>
 
   <script>
-    // Wait for html5-qrcode library to load
+    // ✅ PWA install prompt
+    let deferredPrompt;
+    const installBtn = document.getElementById('installBtn');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.style.display = 'inline-block';
+    });
+
+    installBtn.addEventListener('click', () => {
+      installBtn.style.display = 'none';
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(() => deferredPrompt = null);
+    });
+
+    // ✅ Register Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+
+    // ✅ QR Scanning Logic
     window.addEventListener('load', () => {
       const reader = new Html5Qrcode("reader");
 
-      // Start camera
       Html5Qrcode.getCameras().then(cameras => {
         if (cameras && cameras.length) {
           const cameraId = cameras[0].id;
@@ -46,7 +87,7 @@
               document.getElementById('status').innerText = 
                 "✅ QR Scanned! Saving file...";
 
-              // Auto-save the text in a TXT file
+              // Auto save text as .txt
               const blob = new Blob([qrCodeMessage], { type: "text/plain" });
               const url = URL.createObjectURL(blob);
               const a = document.createElement("a");
@@ -56,15 +97,13 @@
               a.click();
               document.body.removeChild(a);
 
-              // Stop scanning after first successful scan
+              // Stop scanning after success
               reader.stop().then(() => {
                 document.getElementById('status').innerText = 
                   "File saved successfully ✅";
               });
             },
-            errorMessage => {
-              document.getElementById('status').innerText = "Scanning...";
-            }
+            () => { document.getElementById('status').innerText = "Scanning..."; }
           );
         } else {
           document.getElementById('status').innerText = "No camera found.";
